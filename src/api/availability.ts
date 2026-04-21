@@ -77,9 +77,9 @@ export async function checkAllStreaming(
   let cursor = 0;
   const worker = async () => {
     while (true) {
-      const i = cursor++;
-      if (i >= pairs.length) return;
-      const result = await checkAvailability(pairs[i].base, pairs[i].zone);
+      const index = cursor++;
+      if (index >= pairs.length) return;
+      const result = await checkAvailability(pairs[index].base, pairs[index].zone);
       onResult(result);
     }
   };

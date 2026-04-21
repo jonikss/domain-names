@@ -68,15 +68,15 @@ export async function generateCandidates(description: string, count = 20): Promi
 }
 
 function normalize(candidates: Candidate[], max: number): Candidate[] {
-  const seen = new Set<string>();
-  const out: Candidate[] = [];
-  for (const c of candidates) {
-    const name = c.name.trim().toLowerCase();
+  const seenNames = new Set<string>();
+  const normalized: Candidate[] = [];
+  for (const candidate of candidates) {
+    const name = candidate.name.trim().toLowerCase();
     if (!/^[a-z0-9](?:[a-z0-9-]{1,18}[a-z0-9])?$/.test(name)) continue;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    out.push({ name, rationale: c.rationale });
-    if (out.length >= max) break;
+    if (seenNames.has(name)) continue;
+    seenNames.add(name);
+    normalized.push({ name, rationale: candidate.rationale });
+    if (normalized.length >= max) break;
   }
-  return out;
+  return normalized;
 }

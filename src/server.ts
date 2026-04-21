@@ -27,7 +27,7 @@ app.post('/api/suggest', async (req, res) => {
   }
 
   const zones: Zone[] = Array.isArray(body.zones)
-    ? body.zones.filter((z): z is string => typeof z === 'string').filter(isZone)
+    ? body.zones.filter((zone): zone is string => typeof zone === 'string').filter(isZone)
     : [...DEFAULT_ZONES];
   const finalZones = zones.length ? zones : [...DEFAULT_ZONES];
 
@@ -48,19 +48,21 @@ app.post('/api/suggest', async (req, res) => {
     const candidates = await generateCandidates(description, 20);
     send('candidates', { candidates });
 
-    const bases = candidates.map((c) => c.name);
+    const bases = candidates.map((candidate) => candidate.name);
     const total = bases.length * finalZones.length;
-    const rationaleByBase = new Map(candidates.map((c) => [c.name, c.rationale]));
+    const rationaleByBase = new Map(
+      candidates.map((candidate) => [candidate.name, candidate.rationale]),
+    );
     let checked = 0;
 
-    await checkAllStreaming(bases, finalZones, (r) => {
+    await checkAllStreaming(bases, finalZones, (result) => {
       checked++;
       send('check', {
-        fqdn: r.fqdn,
-        base: r.base,
-        zone: r.zone,
-        available: r.available,
-        rationale: rationaleByBase.get(r.base) ?? '',
+        fqdn: result.fqdn,
+        base: result.base,
+        zone: result.zone,
+        available: result.available,
+        rationale: rationaleByBase.get(result.base) ?? '',
         checked,
         total,
       });
