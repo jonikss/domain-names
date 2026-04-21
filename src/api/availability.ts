@@ -67,8 +67,9 @@ export async function checkAllStreaming(
   bases: string[],
   zones: Zone[],
   onResult: (result: AvailabilityResult) => void,
-  concurrency = 12,
+  options: { concurrency?: number; signal?: AbortSignal } = {},
 ): Promise<void> {
+  const concurrency = options.concurrency ?? 12;
   const pairs: Array<{ base: string; zone: Zone }> = [];
   for (const base of bases) {
     for (const zone of zones) pairs.push({ base, zone });
@@ -77,9 +78,11 @@ export async function checkAllStreaming(
   let cursor = 0;
   const worker = async () => {
     while (true) {
+      if (options.signal?.aborted) return;
       const index = cursor++;
       if (index >= pairs.length) return;
       const result = await checkAvailability(pairs[index].base, pairs[index].zone);
+      if (options.signal?.aborted) return;
       onResult(result);
     }
   };

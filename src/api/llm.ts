@@ -1,5 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { z } from 'zod';
+import { CANDIDATE_COUNT } from './zones';
 
 const CandidateSchema = z.object({
   name: z
@@ -16,7 +17,11 @@ const CandidateListSchema = z.object({
 
 export type Candidate = z.infer<typeof CandidateSchema>;
 
-export async function generateCandidates(description: string, count = 20): Promise<Candidate[]> {
+export async function generateCandidates(
+  description: string,
+  options: { count?: number; signal?: AbortSignal } = {},
+): Promise<Candidate[]> {
+  const count = options.count ?? CANDIDATE_COUNT;
   const apiKey = process.env['OPENAI_API_KEY'];
   const baseURL = process.env['OPENAI_BASE_URL'];
   const modelName = process.env['OPENAI_MODEL'] ?? 'gpt-4o-mini';
@@ -63,7 +68,7 @@ export async function generateCandidates(description: string, count = 20): Promi
     `Верни ровно ${count} вариантов. Напоминаю: поле "rationale" — строго на русском.`,
   ].join('\n');
 
-  const result = await structured.invoke(prompt);
+  const result = await structured.invoke(prompt, { signal: options.signal });
   return normalize(result.candidates, count);
 }
 

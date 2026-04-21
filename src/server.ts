@@ -38,14 +38,20 @@ app.post('/api/suggest', async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
+  const abortController = new AbortController();
+  req.on('close', () => abortController.abort());
+
   const send = (event: string, data: unknown) => {
+    if (abortController.signal.aborted) return;
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
   try {
     send('start', { description, zones: finalZones });
-    const candidates = await generateCandidates(description, 20);
+    const candidates = await generateCandidates(description, {
+      signal: abortController.signal,
+    });
     send('candidates', { candidates });
 
     const bases = candidates.map((candidate) => candidate.name);
@@ -55,25 +61,32 @@ app.post('/api/suggest', async (req, res) => {
     );
     let checked = 0;
 
-    await checkAllStreaming(bases, finalZones, (result) => {
-      checked++;
-      send('check', {
-        fqdn: result.fqdn,
-        base: result.base,
-        zone: result.zone,
-        available: result.available,
-        rationale: rationaleByBase.get(result.base) ?? '',
-        checked,
-        total,
-      });
-    });
+    await checkAllStreaming(
+      bases,
+      finalZones,
+      (result) => {
+        checked++;
+        send('check', {
+          fqdn: result.fqdn,
+          base: result.base,
+          zone: result.zone,
+          available: result.available,
+          rationale: rationaleByBase.get(result.base) ?? '',
+          checked,
+          total,
+        });
+      },
+      { signal: abortController.signal },
+    );
 
     send('done', { checked, total });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown error';
-    send('error', { message });
+    if (!abortController.signal.aborted) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      send('error', { message });
+    }
   } finally {
-    res.end();
+    if (!res.writableEnded) res.end();
   }
 });
 

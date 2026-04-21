@@ -1,6 +1,8 @@
 export const DEFAULT_ZONES = ['ru', 'com', 'net', 'org', 'info', 'io', 'app', 'dev'] as const;
 export type Zone = (typeof DEFAULT_ZONES)[number];
 
+export const CANDIDATE_COUNT = 20;
+
 export const RDAP_ENDPOINTS: Partial<Record<Zone, string>> = {
   com: 'https://rdap.verisign.com/com/v1/domain/',
   net: 'https://rdap.verisign.com/net/v1/domain/',
