@@ -63,27 +63,27 @@ function whoisRuAvailable(fqdn: string): Promise<boolean | null> {
   });
 }
 
-export async function checkMany(
+export async function checkAllStreaming(
   bases: string[],
   zones: Zone[],
+  onResult: (result: AvailabilityResult) => void,
   concurrency = 12,
-): Promise<AvailabilityResult[]> {
+): Promise<void> {
   const pairs: Array<{ base: string; zone: Zone }> = [];
   for (const base of bases) {
     for (const zone of zones) pairs.push({ base, zone });
   }
 
-  const results: AvailabilityResult[] = new Array(pairs.length);
   let cursor = 0;
   const worker = async () => {
     while (true) {
       const i = cursor++;
       if (i >= pairs.length) return;
-      results[i] = await checkAvailability(pairs[i].base, pairs[i].zone);
+      const result = await checkAvailability(pairs[i].base, pairs[i].zone);
+      onResult(result);
     }
   };
   await Promise.all(
     Array.from({ length: Math.min(concurrency, pairs.length) }, () => worker()),
   );
-  return results;
 }

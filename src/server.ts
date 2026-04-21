@@ -8,7 +8,7 @@ import {
 import express from 'express';
 import { join } from 'node:path';
 import { generateCandidates } from './api/llm';
-import { checkMany } from './api/availability';
+import { checkAllStreaming } from './api/availability';
 import { DEFAULT_ZONES, isZone, type Zone } from './api/zones';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
@@ -31,31 +31,47 @@ app.post('/api/suggest', async (req, res) => {
     : [...DEFAULT_ZONES];
   const finalZones = zones.length ? zones : [...DEFAULT_ZONES];
 
-  try {
-    const candidates = await generateCandidates(description, 20);
-    const bases = candidates.map((c) => c.name);
-    const checks = await checkMany(bases, finalZones);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
 
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    send('start', { description, zones: finalZones });
+    const candidates = await generateCandidates(description, 20);
+    send('candidates', { candidates });
+
+    const bases = candidates.map((c) => c.name);
+    const total = bases.length * finalZones.length;
     const rationaleByBase = new Map(candidates.map((c) => [c.name, c.rationale]));
-    const free = checks
-      .filter((r) => r.available === true)
-      .map((r) => ({
+    let checked = 0;
+
+    await checkAllStreaming(bases, finalZones, (r) => {
+      checked++;
+      send('check', {
         fqdn: r.fqdn,
         base: r.base,
         zone: r.zone,
+        available: r.available,
         rationale: rationaleByBase.get(r.base) ?? '',
-      }));
-
-    res.json({
-      description,
-      zones: finalZones,
-      candidateCount: candidates.length,
-      checkedCount: checks.length,
-      available: free,
+        checked,
+        total,
+      });
     });
+
+    send('done', { checked, total });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown error';
-    res.status(500).json({ error: message });
+    send('error', { message });
+  } finally {
+    res.end();
   }
 });
 

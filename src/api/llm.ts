@@ -7,7 +7,7 @@ const CandidateSchema = z.object({
     .describe(
       'Base domain name in lowercase ASCII: letters, digits, and internal hyphens only. 3-20 chars. No TLD, no dot.',
     ),
-  rationale: z.string().describe('One short sentence explaining the name idea.'),
+  rationale: z.string().describe('Одно короткое предложение на русском языке, объясняющее идею названия.'),
 });
 
 const CandidateListSchema = z.object({
@@ -38,22 +38,29 @@ export async function generateCandidates(description: string, count = 20): Promi
   });
 
   const prompt = [
-    'You are a creative domain name generator.',
+    'Ты — креативный генератор доменных имён.',
     '',
-    `Given a project description, propose ${count} distinct domain base names (no TLD, no dot).`,
+    `По описанию проекта предложи ${count} различных базовых имён для домена (без зоны, без точки).`,
     '',
-    'Rules:',
-    '- ASCII lowercase letters and digits only; hyphens allowed only between other characters.',
-    '- 3 to 20 characters.',
-    '- Memorable, brandable, relevant to the description.',
-    '- Mix styles: made-up words, compounds, short metaphors, Latin/Greek roots, transliterated Russian where it fits.',
-    '- Do not pad with meaningless numbers or suffixes.',
-    '- Avoid well-known trademarks.',
+    'Правила для поля "name" (только это поле — на английском):',
+    '- Только строчные ASCII-буквы и цифры; дефис допустим только между символами, не в начале и не в конце.',
+    '- Длина 3–20 символов.',
+    '- Запоминающееся, брендовое, связанное с описанием.',
+    '- Смешивай стили: придуманные слова, составные слова, короткие метафоры, латинские/греческие корни, транслит русских слов.',
+    '- Без бессмысленных цифр и суффиксов ради длины.',
+    '- Не использовать известные торговые марки.',
     '',
-    'Project description:',
+    'Правила для поля "rationale" (КРИТИЧНО):',
+    '- ТОЛЬКО на русском языке. Никогда на английском.',
+    '- Одно короткое предложение, до 15 слов.',
+    '- Объясняет смысл или идею имени.',
+    '- Пример: {"name": "divanex", "rationale": "Соединение \\"диван\\" и \\"ex\\" — намёк на эксклюзивность мебели."}',
+    '- Пример: {"name": "cozyalia", "rationale": "Слово \\"cozy\\" с мелодичным окончанием — ощущение уюта."}',
+    '',
+    'Описание проекта:',
     `"""${description}"""`,
     '',
-    `Return exactly ${count} candidates.`,
+    `Верни ровно ${count} вариантов. Напоминаю: поле "rationale" — строго на русском.`,
   ].join('\n');
 
   const result = await structured.invoke(prompt);

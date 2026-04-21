@@ -7,8 +7,8 @@ export const RDAP_ENDPOINTS: Partial<Record<Zone, string>> = {
   org: 'https://rdap.publicinterestregistry.org/rdap/domain/',
   info: 'https://rdap.identitydigital.services/rdap/domain/',
   io: 'https://rdap.identitydigital.services/rdap/domain/',
-  app: 'https://www.registry.google/rdap/domain/',
-  dev: 'https://www.registry.google/rdap/domain/',
+  app: 'https://pubapi.registry.google/rdap/domain/',
+  dev: 'https://pubapi.registry.google/rdap/domain/',
 };
 
 export function isZone(value: string): value is Zone {
