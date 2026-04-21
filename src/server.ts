@@ -39,7 +39,9 @@ app.post('/api/suggest', async (req, res) => {
   });
 
   const abortController = new AbortController();
-  req.on('close', () => abortController.abort());
+  res.on('close', () => {
+    if (!res.writableEnded) abortController.abort();
+  });
 
   const send = (event: string, data: unknown) => {
     if (abortController.signal.aborted) return;
