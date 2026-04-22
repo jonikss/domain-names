@@ -6,7 +6,7 @@ import {
 } from '../../api/platforms';
 import { CANDIDATE_COUNT, DEFAULT_ZONES, INITIAL_ZONES, type Zone } from '../../api/zones';
 import { readSseEvents } from './sse-stream';
-import type { AvailableItem, CheckEvent, Phase, ResultGroup } from './types';
+import type { AvailableItem, CandidateCard, CheckEvent, Phase } from './types';
 
 @Injectable({ providedIn: 'root' })
 export class SuggestService {
@@ -20,6 +20,9 @@ export class SuggestService {
   readonly checkedCount = signal(0);
   readonly totalCount = signal(0);
   readonly freeItems = signal<AvailableItem[]>([]);
+  private readonly baseOrder = signal<string[]>([]);
+  private readonly rationaleByBase = signal<Map<string, string>>(new Map());
+  private readonly segmentsByBase = signal<Map<string, string[]>>(new Map());
 
   readonly loading = computed(() => {
     const currentPhase = this.phase();
@@ -38,24 +41,54 @@ export class SuggestService {
     return Math.round((this.checkedCount() / total) * 100);
   });
 
-  readonly grouped = computed<ResultGroup[]>(() => {
+  readonly cards = computed<CandidateCard[]>(() => {
     const items = this.freeItems();
-    const zoneLists = new Map<Zone, AvailableItem[]>();
-    const platformLists = new Map<Platform, AvailableItem[]>();
-    for (const zone of DEFAULT_ZONES) zoneLists.set(zone, []);
-    for (const platform of PLATFORMS) platformLists.set(platform, []);
+    const order = this.baseOrder();
+    const rationales = this.rationaleByBase();
+    const segments = this.segmentsByBase();
+    const zoneRank = new Map(DEFAULT_ZONES.map((zone, index) => [zone, index]));
+    const platformRank = new Map(PLATFORMS.map((platform, index) => [platform, index]));
+
+    const byBase = new Map<string, CandidateCard>();
     for (const item of items) {
-      if (item.target.kind === 'zone') zoneLists.get(item.target.zone)?.push(item);
-      else platformLists.get(item.target.platform)?.push(item);
+      let card = byBase.get(item.base);
+      if (!card) {
+        card = {
+          base: item.base,
+          segments: segments.get(item.base) ?? [item.base],
+          rationale: rationales.get(item.base) ?? '',
+          zones: [],
+          platforms: [],
+        };
+        byBase.set(item.base, card);
+      }
+      if (item.target.kind === 'zone') {
+        card.zones.push({ zone: item.target.zone, url: item.url });
+      } else {
+        card.platforms.push({ platform: item.target.platform, url: item.url });
+      }
     }
-    const groups: ResultGroup[] = [];
-    for (const [zone, list] of zoneLists) {
-      if (list.length) groups.push({ kind: 'zone', zone, list });
+
+    for (const card of byBase.values()) {
+      card.zones.sort((a, b) => (zoneRank.get(a.zone) ?? 0) - (zoneRank.get(b.zone) ?? 0));
+      card.platforms.sort(
+        (a, b) => (platformRank.get(a.platform) ?? 0) - (platformRank.get(b.platform) ?? 0),
+      );
     }
-    for (const [platform, list] of platformLists) {
-      if (list.length) groups.push({ kind: 'platform', platform, list });
+
+    const cards: CandidateCard[] = [];
+    const seen = new Set<string>();
+    for (const base of order) {
+      const card = byBase.get(base);
+      if (card) {
+        cards.push(card);
+        seen.add(base);
+      }
     }
-    return groups;
+    for (const [base, card] of byBase) {
+      if (!seen.has(base)) cards.push(card);
+    }
+    return cards;
   });
 
   toggleZone(zone: Zone, checked: boolean) {
@@ -89,6 +122,9 @@ export class SuggestService {
     const platforms = [...this.selectedPlatforms()];
     this.totalCount.set(CANDIDATE_COUNT * (zones.length + platforms.length));
     this.freeItems.set([]);
+    this.baseOrder.set([]);
+    this.rationaleByBase.set(new Map());
+    this.segmentsByBase.set(new Map());
 
     try {
       const response = await fetch('/api/suggest', {
@@ -132,6 +168,16 @@ export class SuggestService {
         break;
       }
       case 'candidates': {
+        const payloadCandidates = payload as {
+          candidates: Array<{ name: string; segments: string[]; rationale: string }>;
+        };
+        this.baseOrder.set(payloadCandidates.candidates.map((c) => c.name));
+        this.rationaleByBase.set(
+          new Map(payloadCandidates.candidates.map((c) => [c.name, c.rationale])),
+        );
+        this.segmentsByBase.set(
+          new Map(payloadCandidates.candidates.map((c) => [c.name, c.segments])),
+        );
         this.phase.set('checking');
         break;
       }
@@ -146,7 +192,6 @@ export class SuggestService {
               base: checkPayload.base,
               target: checkPayload.target,
               url: checkPayload.url,
-              rationale: checkPayload.rationale,
             },
           ]);
         }

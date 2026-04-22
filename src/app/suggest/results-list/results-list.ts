@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { PLATFORM_LABEL } from '../../../api/platforms';
-import type { ResultGroup } from '../types';
+import type { CandidateCard } from '../types';
 
 @Component({
   selector: 'app-results-list',
@@ -9,10 +9,6 @@ import type { ResultGroup } from '../types';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ResultsList {
-  readonly groups = input.required<ResultGroup[]>();
+  readonly cards = input.required<CandidateCard[]>();
   readonly platformLabel = PLATFORM_LABEL;
-
-  trackGroup(_index: number, group: ResultGroup): string {
-    return group.kind === 'zone' ? `z:${group.zone}` : `p:${group.platform}`;
-  }
 }

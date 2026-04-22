@@ -29,7 +29,7 @@
 
     @if (freeItems().length > 0) {
       <div class="mt-6">
-        <app-results-list [groups]="grouped()" />
+        <app-results-list [cards]="cards()" />
       </div>
     } @else if (phase() === 'done') {
       <div class="mt-6 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">

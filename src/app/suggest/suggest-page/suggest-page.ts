@@ -20,5 +20,5 @@ export class SuggestPage {
   readonly totalCount = this.service.totalCount;
   readonly progressPercent = this.service.progressPercent;
   readonly freeItems = this.service.freeItems;
-  readonly grouped = this.service.grouped;
+  readonly cards = this.service.cards;
 }

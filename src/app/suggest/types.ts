@@ -11,7 +11,6 @@ export type AvailableItem = {
   base: string;
   target: CheckTarget;
   url: string;
-  rationale: string;
 };
 
 export type CheckEvent = {
@@ -24,6 +23,10 @@ export type CheckEvent = {
   total: number;
 };
 
-export type ResultGroup =
-  | { kind: 'zone'; zone: Zone; list: AvailableItem[] }
-  | { kind: 'platform'; platform: Platform; list: AvailableItem[] };
+export type CandidateCard = {
+  base: string;
+  segments: string[];
+  rationale: string;
+  zones: Array<{ zone: Zone; url: string }>;
+  platforms: Array<{ platform: Platform; url: string }>;
+};
