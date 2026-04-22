@@ -19,6 +19,6 @@ export class SuggestPage {
   readonly checkedCount = this.service.checkedCount;
   readonly totalCount = this.service.totalCount;
   readonly progressPercent = this.service.progressPercent;
-  readonly freeDomains = this.service.freeDomains;
+  readonly freeItems = this.service.freeItems;
   readonly grouped = this.service.grouped;
 }

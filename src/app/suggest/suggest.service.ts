@@ -1,18 +1,25 @@
 import { Injectable, computed, signal } from '@angular/core';
+import {
+  INITIAL_PLATFORMS,
+  PLATFORMS,
+  type Platform,
+} from '../../api/platforms';
 import { CANDIDATE_COUNT, DEFAULT_ZONES, INITIAL_ZONES, type Zone } from '../../api/zones';
 import { readSseEvents } from './sse-stream';
-import type { AvailableDomain, CheckEvent, Phase, ZoneGroup } from './types';
+import type { AvailableItem, CheckEvent, Phase, ResultGroup } from './types';
 
 @Injectable({ providedIn: 'root' })
 export class SuggestService {
   readonly zones = DEFAULT_ZONES;
+  readonly platforms = PLATFORMS;
   readonly description = signal('');
   readonly selectedZones = signal<Set<Zone>>(new Set(INITIAL_ZONES));
+  readonly selectedPlatforms = signal<Set<Platform>>(new Set(INITIAL_PLATFORMS));
   readonly phase = signal<Phase>('idle');
   readonly error = signal<string | null>(null);
   readonly checkedCount = signal(0);
   readonly totalCount = signal(0);
-  readonly freeDomains = signal<AvailableDomain[]>([]);
+  readonly freeItems = signal<AvailableItem[]>([]);
 
   readonly loading = computed(() => {
     const currentPhase = this.phase();
@@ -21,7 +28,8 @@ export class SuggestService {
 
   readonly canSubmit = computed(() => {
     const description = this.description().trim();
-    return !this.loading() && description.length >= 3 && this.selectedZones().size > 0;
+    const anyTarget = this.selectedZones().size + this.selectedPlatforms().size > 0;
+    return !this.loading() && description.length >= 3 && anyTarget;
   });
 
   readonly progressPercent = computed(() => {
@@ -30,14 +38,24 @@ export class SuggestService {
     return Math.round((this.checkedCount() / total) * 100);
   });
 
-  readonly grouped = computed<ZoneGroup[]>(() => {
-    const domains = this.freeDomains();
-    const byZone = new Map<Zone, AvailableDomain[]>();
-    for (const zone of DEFAULT_ZONES) byZone.set(zone, []);
-    for (const domain of domains) byZone.get(domain.zone)?.push(domain);
-    return [...byZone.entries()]
-      .filter(([, list]) => list.length > 0)
-      .map(([zone, list]) => ({ zone, list }));
+  readonly grouped = computed<ResultGroup[]>(() => {
+    const items = this.freeItems();
+    const zoneLists = new Map<Zone, AvailableItem[]>();
+    const platformLists = new Map<Platform, AvailableItem[]>();
+    for (const zone of DEFAULT_ZONES) zoneLists.set(zone, []);
+    for (const platform of PLATFORMS) platformLists.set(platform, []);
+    for (const item of items) {
+      if (item.target.kind === 'zone') zoneLists.get(item.target.zone)?.push(item);
+      else platformLists.get(item.target.platform)?.push(item);
+    }
+    const groups: ResultGroup[] = [];
+    for (const [zone, list] of zoneLists) {
+      if (list.length) groups.push({ kind: 'zone', zone, list });
+    }
+    for (const [platform, list] of platformLists) {
+      if (list.length) groups.push({ kind: 'platform', platform, list });
+    }
+    return groups;
   });
 
   toggleZone(zone: Zone, checked: boolean) {
@@ -51,13 +69,26 @@ export class SuggestService {
     return this.selectedZones().has(zone);
   }
 
+  togglePlatform(platform: Platform, checked: boolean) {
+    const next = new Set(this.selectedPlatforms());
+    if (checked) next.add(platform);
+    else next.delete(platform);
+    this.selectedPlatforms.set(next);
+  }
+
+  isPlatformSelected(platform: Platform): boolean {
+    return this.selectedPlatforms().has(platform);
+  }
+
   async start() {
     if (!this.canSubmit()) return;
     this.phase.set('generating');
     this.error.set(null);
     this.checkedCount.set(0);
-    this.totalCount.set(0);
-    this.freeDomains.set([]);
+    const zones = [...this.selectedZones()];
+    const platforms = [...this.selectedPlatforms()];
+    this.totalCount.set(CANDIDATE_COUNT * (zones.length + platforms.length));
+    this.freeItems.set([]);
 
     try {
       const response = await fetch('/api/suggest', {
@@ -65,7 +96,8 @@ export class SuggestService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           description: this.description().trim(),
-          zones: [...this.selectedZones()],
+          zones,
+          platforms,
         }),
       });
 
@@ -94,8 +126,9 @@ export class SuggestService {
 
     switch (eventName) {
       case 'start': {
-        const startPayload = payload as { zones: Zone[] };
-        this.totalCount.set(CANDIDATE_COUNT * startPayload.zones.length);
+        const startPayload = payload as { zones: Zone[]; platforms: Platform[] };
+        const targets = startPayload.zones.length + startPayload.platforms.length;
+        this.totalCount.set(CANDIDATE_COUNT * targets);
         break;
       }
       case 'candidates': {
@@ -107,12 +140,12 @@ export class SuggestService {
         this.checkedCount.set(checkPayload.checked);
         this.totalCount.set(checkPayload.total);
         if (checkPayload.available === true) {
-          this.freeDomains.update((list) => [
+          this.freeItems.update((list) => [
             ...list,
             {
-              fqdn: checkPayload.fqdn,
               base: checkPayload.base,
-              zone: checkPayload.zone,
+              target: checkPayload.target,
+              url: checkPayload.url,
               rationale: checkPayload.rationale,
             },
           ]);

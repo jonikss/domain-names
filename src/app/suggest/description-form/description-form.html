@@ -35,6 +35,29 @@
     </div>
   </fieldset>
 
+  <fieldset class="mt-4">
+    <legend class="text-sm font-medium text-slate-700">Аккаунты</legend>
+    <div class="mt-2 flex flex-wrap gap-2">
+      @for (platform of platforms; track platform) {
+        <label
+          class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm hover:border-indigo-400"
+          [class.border-indigo-500]="isPlatformSelected(platform)"
+          [class.bg-indigo-50]="isPlatformSelected(platform)"
+          [class.text-indigo-700]="isPlatformSelected(platform)"
+        >
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            [checked]="isPlatformSelected(platform)"
+            (change)="togglePlatform(platform, $any($event.target).checked)"
+            [disabled]="loading()"
+          />
+          <span>{{ platformLabel[platform] }}</span>
+        </label>
+      }
+    </div>
+  </fieldset>
+
   <div class="mt-5 flex items-center gap-3">
     <button
       type="button"

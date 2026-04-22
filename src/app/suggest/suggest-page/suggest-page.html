@@ -3,7 +3,7 @@
     <header class="mb-8">
       <h1 class="text-3xl font-semibold tracking-tight">Domain Names</h1>
       <p class="mt-2 text-slate-600">
-        Опиши проект — получи свободные доменные имена в выбранных зонах.
+        Опиши проект — получи свободные домены и аккаунты для выбранных зон и платформ.
       </p>
     </header>
 
@@ -22,12 +22,12 @@
           [checkedCount]="checkedCount()"
           [totalCount]="totalCount()"
           [progressPercent]="progressPercent()"
-          [freeCount]="freeDomains().length"
+          [freeCount]="freeItems().length"
         />
       </div>
     }
 
-    @if (freeDomains().length > 0) {
+    @if (freeItems().length > 0) {
       <div class="mt-6">
         <app-results-list [groups]="grouped()" />
       </div>
