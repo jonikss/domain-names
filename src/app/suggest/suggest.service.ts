@@ -1,5 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { CANDIDATE_COUNT, DEFAULT_ZONES, type Zone } from '../../api/zones';
+import { CANDIDATE_COUNT, DEFAULT_ZONES, INITIAL_ZONES, type Zone } from '../../api/zones';
 import { readSseEvents } from './sse-stream';
 import type { AvailableDomain, CheckEvent, Phase, ZoneGroup } from './types';
 
@@ -7,7 +7,7 @@ import type { AvailableDomain, CheckEvent, Phase, ZoneGroup } from './types';
 export class SuggestService {
   readonly zones = DEFAULT_ZONES;
   readonly description = signal('');
-  readonly selectedZones = signal<Set<Zone>>(new Set(DEFAULT_ZONES));
+  readonly selectedZones = signal<Set<Zone>>(new Set(INITIAL_ZONES));
   readonly phase = signal<Phase>('idle');
   readonly error = signal<string | null>(null);
   readonly checkedCount = signal(0);

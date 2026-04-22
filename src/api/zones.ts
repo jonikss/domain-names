@@ -1,6 +1,8 @@
 export const DEFAULT_ZONES = ['ru', 'com', 'net', 'org', 'info', 'io', 'app', 'dev'] as const;
 export type Zone = (typeof DEFAULT_ZONES)[number];
 
+export const INITIAL_ZONES: readonly Zone[] = ['ru', 'com'];
+
 export const CANDIDATE_COUNT = 20;
 
 export const RDAP_ENDPOINTS: Partial<Record<Zone, string>> = {
