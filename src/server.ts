@@ -8,8 +8,9 @@ import {
 import express from 'express';
 import { join } from 'node:path';
 import { generateCandidates } from './api/llm';
-import { checkAllStreaming } from './api/availability';
-import { DEFAULT_ZONES, isZone, type Zone } from './api/zones';
+import { checkAllStreaming, type AvailabilityTarget } from './api/availability';
+import { isZone, type Zone } from './api/zones';
+import { isPlatform, type Platform } from './api/platforms';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -19,7 +20,7 @@ const angularApp = new AngularNodeAppEngine();
 app.use(express.json({ limit: '16kb' }));
 
 app.post('/api/suggest', async (req, res) => {
-  const body = req.body as { description?: unknown; zones?: unknown };
+  const body = req.body as { description?: unknown; zones?: unknown; platforms?: unknown };
   const description = typeof body.description === 'string' ? body.description.trim() : '';
   if (description.length < 3 || description.length > 2000) {
     res.status(400).json({ error: 'description must be 3-2000 characters' });
@@ -28,8 +29,21 @@ app.post('/api/suggest', async (req, res) => {
 
   const zones: Zone[] = Array.isArray(body.zones)
     ? body.zones.filter((zone): zone is string => typeof zone === 'string').filter(isZone)
-    : [...DEFAULT_ZONES];
-  const finalZones = zones.length ? zones : [...DEFAULT_ZONES];
+    : [];
+
+  const platforms: Platform[] = Array.isArray(body.platforms)
+    ? body.platforms.filter((value): value is string => typeof value === 'string').filter(isPlatform)
+    : [];
+
+  if (zones.length === 0 && platforms.length === 0) {
+    res.status(400).json({ error: 'at least one zone or platform must be selected' });
+    return;
+  }
+
+  const targets: AvailabilityTarget[] = [
+    ...zones.map((zone): AvailabilityTarget => ({ kind: 'zone', zone })),
+    ...platforms.map((platform): AvailabilityTarget => ({ kind: 'platform', platform })),
+  ];
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -50,14 +64,14 @@ app.post('/api/suggest', async (req, res) => {
   };
 
   try {
-    send('start', { description, zones: finalZones });
+    send('start', { description, zones, platforms });
     const candidates = await generateCandidates(description, {
       signal: abortController.signal,
     });
     send('candidates', { candidates });
 
     const bases = candidates.map((candidate) => candidate.name);
-    const total = bases.length * finalZones.length;
+    const total = bases.length * targets.length;
     const rationaleByBase = new Map(
       candidates.map((candidate) => [candidate.name, candidate.rationale]),
     );
@@ -65,13 +79,13 @@ app.post('/api/suggest', async (req, res) => {
 
     await checkAllStreaming(
       bases,
-      finalZones,
+      targets,
       (result) => {
         checked++;
         send('check', {
-          fqdn: result.fqdn,
           base: result.base,
-          zone: result.zone,
+          target: result.target,
+          url: result.url,
           available: result.available,
           rationale: rationaleByBase.get(result.base) ?? '',
           checked,

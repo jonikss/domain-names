@@ -1,26 +1,49 @@
 import net from 'node:net';
+import { platformUrl, type Platform } from './platforms';
 import { RDAP_ENDPOINTS, type Zone } from './zones';
 
 const WHOIS_RU_HOST = 'whois.tcinet.ru';
 const WHOIS_PORT = 43;
 const RDAP_TIMEOUT_MS = 6000;
 const WHOIS_TIMEOUT_MS = 8000;
+const HTTP_TIMEOUT_MS = 6000;
+const USER_AGENT =
+  'Mozilla/5.0 (compatible; DomainNamesBot/1.0; +https://github.com/joniks/domain-names)';
+
+export type AvailabilityTarget =
+  | { kind: 'zone'; zone: Zone }
+  | { kind: 'platform'; platform: Platform };
 
 export type AvailabilityResult = {
-  fqdn: string;
   base: string;
-  zone: Zone;
+  target: AvailabilityTarget;
+  url: string;
   available: boolean | null;
 };
 
-export async function checkAvailability(base: string, zone: Zone): Promise<AvailabilityResult> {
-  const fqdn = `${base}.${zone}`;
+export async function checkAvailability(
+  base: string,
+  target: AvailabilityTarget,
+): Promise<AvailabilityResult> {
+  if (target.kind === 'zone') {
+    const fqdn = `${base}.${target.zone}`;
+    try {
+      const available =
+        target.zone === 'ru' ? await whoisRuAvailable(fqdn) : await rdapAvailable(fqdn, target.zone);
+      return { base, target, url: fqdn, available };
+    } catch {
+      return { base, target, url: fqdn, available: null };
+    }
+  }
+  const url = platformUrl(target.platform, base);
   try {
     const available =
-      zone === 'ru' ? await whoisRuAvailable(fqdn) : await rdapAvailable(fqdn, zone);
-    return { fqdn, base, zone, available };
+      target.platform === 'telegram'
+        ? await telegramHandleAvailable(base)
+        : await vkHandleAvailable(base);
+    return { base, target, url, available };
   } catch {
-    return { fqdn, base, zone, available: null };
+    return { base, target, url, available: null };
   }
 }
 
@@ -63,16 +86,40 @@ function whoisRuAvailable(fqdn: string): Promise<boolean | null> {
   });
 }
 
+async function telegramHandleAvailable(name: string): Promise<boolean | null> {
+  const res = await fetch(`https://t.me/${encodeURIComponent(name)}`, {
+    headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
+    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    redirect: 'follow',
+  });
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (text.includes('tgme_page_title')) return false;
+  if (text.includes('tgme_icon_user') || text.includes('tgme_username_link')) return true;
+  return null;
+}
+
+async function vkHandleAvailable(name: string): Promise<boolean | null> {
+  const res = await fetch(`https://vk.com/${encodeURIComponent(name)}`, {
+    headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
+    signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+    redirect: 'follow',
+  });
+  if (res.status === 404) return true;
+  if (res.status === 200) return false;
+  return null;
+}
+
 export async function checkAllStreaming(
   bases: string[],
-  zones: Zone[],
+  targets: AvailabilityTarget[],
   onResult: (result: AvailabilityResult) => void,
   options: { concurrency?: number; signal?: AbortSignal } = {},
 ): Promise<void> {
   const concurrency = options.concurrency ?? 12;
-  const pairs: Array<{ base: string; zone: Zone }> = [];
+  const pairs: Array<{ base: string; target: AvailabilityTarget }> = [];
   for (const base of bases) {
-    for (const zone of zones) pairs.push({ base, zone });
+    for (const target of targets) pairs.push({ base, target });
   }
 
   let cursor = 0;
@@ -81,7 +128,7 @@ export async function checkAllStreaming(
       if (options.signal?.aborted) return;
       const index = cursor++;
       if (index >= pairs.length) return;
-      const result = await checkAvailability(pairs[index].base, pairs[index].zone);
+      const result = await checkAvailability(pairs[index].base, pairs[index].target);
       if (options.signal?.aborted) return;
       onResult(result);
     }
