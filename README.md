@@ -1,59 +1,101 @@
-# DomainNames
+# Domain Names
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.7.
+Подбор свободных доменных имён по описанию проекта. По тексту от пользователя LLM генерирует
+20 кандидатов, сервис параллельно проверяет их доступность в выбранных зонах через RDAP/WHOIS,
+результаты стримятся в UI через Server-Sent Events.
 
-## Development server
+## Как работает
 
-To start a local development server, run:
+1. Пользователь вводит описание проекта и отмечает зоны (по умолчанию `.ru` и `.com`).
+2. Фронт отправляет `POST /api/suggest` и читает SSE-поток.
+3. Сервер:
+   - `generateCandidates()` → LangChain + OpenAI-совместимая LLM возвращает 20 брендовых имён
+     с рациональным объяснением на русском (structured output через Zod-схему).
+   - `checkAllStreaming()` → 12 параллельных воркеров проверяют каждую пару `base.zone`:
+     RDAP для `.com/.net/.org/.info/.io/.app/.dev`, WHOIS (TCP 43, `whois.tcinet.ru`) для `.ru`.
+   - Каждая проверка шлётся клиенту событием `check`.
+4. Клиент копит свободные домены и группирует по зонам.
 
-```bash
-ng serve
+## События SSE
+
+| Событие      | Данные                                                    |
+| ------------ | --------------------------------------------------------- |
+| `start`      | `{ description, zones }`                                  |
+| `candidates` | `{ candidates: [{ name, rationale }] }`                   |
+| `check`      | `{ fqdn, base, zone, available, rationale, checked, total }` |
+| `done`       | `{ checked, total }`                                      |
+| `error`      | `{ message }`                                             |
+
+## Структура
+
+```
+src/
+  api/
+    zones.ts           # DEFAULT_ZONES (все), INITIAL_ZONES (выбраны по умолчанию), RDAP endpoints
+    llm.ts             # generateCandidates() — LangChain + Zod structured output
+    availability.ts    # checkAllStreaming() — RDAP/WHOIS с воркер-пулом
+  server.ts            # Express + Angular SSR + POST /api/suggest (SSE)
+  app/
+    app.ts             # shell: <router-outlet />
+    app.routes.ts      # '' → SuggestPage
+    suggest/
+      types.ts
+      sse-stream.ts    # readSseEvents() — async-генератор поверх ReadableStream
+      suggest.service.ts           # @Injectable, signals + start()
+      suggest-page/    # container, инжектит сервис
+      description-form/            # форма ввода + чекбоксы зон
+      progress-panel/              # прогресс-бар и фазы
+      results-list/                # группировка результатов по зонам
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Все компоненты standalone, `ChangeDetectionStrategy.OnPush`, signal-based `input()`.
 
-## Code scaffolding
+## Стек
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+- Angular 21 + SSR (`@angular/ssr/node`)
+- Express 5
+- LangChain.js 1 (`@langchain/openai`) + Zod structured output
+- RDAP по bootstrap от IANA (hardcoded endpoints)
+- WHOIS через `net.createConnection` (только `.ru`)
+- Tailwind CSS 4
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+## Запуск локально
 
 ```bash
-ng build
+npm install
+cp .env.example .env  # заполнить ключи
+npm run build
+npm run serve:ssr:domain-names  # собранный prod-бандл, порт 4000
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Переменные окружения:
 
-## Running unit tests
+| Переменная         | Назначение                                      | Пример                         |
+| ------------------ | ----------------------------------------------- | ------------------------------ |
+| `OPENAI_API_KEY`   | Ключ OpenAI-совместимого провайдера             | `sk-...`                       |
+| `OPENAI_BASE_URL`  | Базовый URL API (опционально)                   | `https://routerai.ru/api/v1`   |
+| `OPENAI_MODEL`     | Модель (опционально, по умолчанию `gpt-4o-mini`)| `openai/gpt-4o-mini`           |
+| `PORT`             | Порт сервера (по умолчанию 4000)                | `4100`                         |
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+> `ng serve` (dev mode с Vite) не работает из-за того, что Vite SSR-трансформер спотыкается на
+> `import.meta` в бандле LangChain. Для разработки используй собранный бандл через
+> `serve:ssr:domain-names` либо `ng build --watch` в другом терминале.
+
+## Деплой на Vercel
+
+В репозитории есть `vercel.json` и `api/index.mjs` (реэкспорт `reqHandler`). Перед деплоем:
+
+1. **Settings → Functions → Fluid Compute** — включить toggle. На Hobby это поднимает лимит
+   функции с 10s до 60s (полный поиск занимает 10–30s).
+2. **Settings → Environment Variables** — добавить `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+   `OPENAI_MODEL` в Production и Preview.
+3. `vercel --prod` либо push в подключённый репозиторий.
+
+Статика (`dist/domain-names/browser/`) раздаётся с CDN, всё остальное маршрутизируется на функцию.
+Префрендер `/` отрабатывает на этапе сборки — на рантайме SSR нужен только для динамических роутов.
+
+## Тесты
 
 ```bash
-ng test
+npm test
 ```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
