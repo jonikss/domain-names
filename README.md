@@ -1,8 +1,9 @@
 # Domain Names
 
-Подбор свободных доменных имён по описанию проекта. По тексту от пользователя LLM генерирует
-20 кандидатов, сервис параллельно проверяет их доступность в выбранных зонах через RDAP/WHOIS,
-результаты стримятся в UI через Server-Sent Events.
+Подбор свободных доменных имён и соцсетевых хэндлов по описанию проекта. По тексту от
+пользователя LLM генерирует 20 кандидатов, сервис параллельно проверяет их доступность в
+выбранных доменных зонах (RDAP/WHOIS) и на платформах (Telegram, VK), результаты стримятся в
+UI через Server-Sent Events.
 
 ## Как работает
 
@@ -11,8 +12,10 @@
 3. Сервер:
    - `generateCandidates()` → LangChain + OpenAI-совместимая LLM возвращает 20 брендовых имён
      с рациональным объяснением на русском (structured output через Zod-схему).
-   - `checkAllStreaming()` → 12 параллельных воркеров проверяют каждую пару `base.zone`:
-     RDAP для `.com/.net/.org/.info/.io/.app/.dev`, WHOIS (TCP 43, `whois.tcinet.ru`) для `.ru`.
+   - `checkAllStreaming()` → 12 параллельных воркеров проверяют каждую пару `base × target`:
+     - Зоны: RDAP для `.com/.net/.org/.info/.io/.app/.dev`, WHOIS (TCP 43, `whois.tcinet.ru`) для `.ru`.
+     - Платформы: `t.me/{name}` (по наличию класса `tgme_page_title`), `vk.com/{name}` (по
+       HTTP-статусу 200 vs 404).
    - Каждая проверка шлётся клиенту событием `check`.
 4. Клиент копит свободные домены и группирует по зонам.
 
@@ -32,8 +35,9 @@
 src/
   api/
     zones.ts           # DEFAULT_ZONES (все), INITIAL_ZONES (выбраны по умолчанию), RDAP endpoints
+    platforms.ts       # PLATFORMS (telegram, vk), URL-конструктор
     llm.ts             # generateCandidates() — LangChain + Zod structured output
-    availability.ts    # checkAllStreaming() — RDAP/WHOIS с воркер-пулом
+    availability.ts    # checkAllStreaming() — RDAP/WHOIS/HTTP с воркер-пулом
   server.ts            # Express + Angular SSR + POST /api/suggest (SSE)
   app/
     app.ts             # shell: <router-outlet />
